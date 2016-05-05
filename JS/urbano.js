@@ -1,8 +1,8 @@
 ﻿$(function(){
 	$("#linksMenu").listview();
 	$("#Menu").panel();
-	//google.maps.event.addDomListener(window, 'load', APP.MAP.initAutocomplete);
 	$(".BTNmapMenu").on("click",function(){$("#mapMenu").panel("open")})
+	$(".BTNposMenu").on("click",function(){$("#posMenu").panel("open")})
 	$(".BTNMenu").on("click",function(){$("#Menu").panel("open")})
 	$(window).bind('beforeunload', function(){return 'Are you sure you want to leave?';});
 	$(document).on("pagecontainershow",function(e,ui){
@@ -10,6 +10,7 @@
 		//else{
 			var PAG=ui.toPage[0].id;
 			//console.log("SHOW "+PAG)
+			APP.USER.pagina=PAG
 			APP.init.ALL()
 			if($.isFunction(APP.init[PAG])){
 				APP.init[PAG]()
@@ -34,6 +35,21 @@
 			//	}
 			}
 		});
+	if(!APP.USER.logged){
+		var COOKIE=APP.UTIL.cookie.get("URBANO")
+		if(COOKIE){
+			try{
+				var CK=JSON.parse(COOKIE)
+				APP.USER=CK.USER
+				APP.ASSET=CK.ASSET
+				APP.UTIL.getTabelle()
+				APP.UTIL.go(CK.USER.pagina)
+				}
+			catch(e){
+				console.log("Errore lettura cookie")
+				}
+			}
+		}
 	})
 DEFAULT={
 	ASSET:{			// asset di default
@@ -105,10 +121,13 @@ APP={
 	TOOL:false,				// dati per tools
 	ASSET:false,			// dati temporanei asset			
 	USER:{
+		logged:false,
 		id:"",
 		lin:"",
 		token:false,
-		task:"Urbano"
+		task:"Urbano",
+		pagina:"Login",
+		expire:(moment().add(8,'hours').toDate()).toUTCString()
 		},
 	PARSE:{
 		tab:function(RESULT){
@@ -152,11 +171,11 @@ APP={
 							}					
 						try{
 							TAB[v.category][v.type]=JSON.parse(v.dataprop)
+							TAB[v.category][v.type].Perimetro=(v.type=="Albero")?true:false
 							TAB[v.category][v.type].Icona=(v.urlfile.indexOf("http")==-1)?"http://159.122.132.173/urbano/images/"+v.urlfile:v.urlfile
-							
 							}
 						catch(e){
-							APP.ERRORE="Il campo dataprop risulta essere vuoto"
+							APP.ERRORE="Il campo dataprop risulta essere vuoto o non valido"
 							}
 						}
 					})
@@ -165,7 +184,7 @@ APP={
 				APP.ERRORE="La tabella metadati risulta essere vuota"
 				}
 			return(TAB)			
-			},
+			},		
 		scheda:function(Result,CALLBACK){
 			RESULT=(Result.result)?Result.result:Result
 			if(RESULT.length>0){
@@ -248,22 +267,23 @@ APP={
 	init:{
 		ALL:function(){
 			APP.UTIL.chk()
+			APP.UTIL.cookie.set("URBANO",{"USER":APP.USER,"ASSET":APP.ASSET},false)
 			},
 		Home:function(){ // init
+			
 			//	
 			DEFAULT.ASSET.Lin=APP.USER.lin
 			//
 			//
 			if($.isEmptyObject(APP.TABDATA)){
 				$("#POPmappaTitle").html("Attenzione")
-				var str=[]
+				var str=''
 				str+='<strong>La tabella dei metadati risulta essere vuota.</strong><br>'
 				str+='Non &egrave possibile continuare, provare a ricaricare l&#39;applicazione'
 				$("#POPmappaTxt").html(str)						
 				$("#POPmappa").popup("open")
 				}
 			else{
-				
 				if(APP.GETPOSITION){
 					navigator.geolocation.getCurrentPosition(function(position){
 						APP.MAP.LAT=position.coords.latitude;
@@ -271,7 +291,16 @@ APP={
 						APP.MAP.ZOOM=10;
 						APP.TAB=false
 						APP.MAP.draw()
-						})
+						},
+						function(){
+							APP.MAP.draw()
+							var str=''
+							str+='<strong>Il rilevamento di posizione risulta essere non attivo o non disponibile.</strong><br>'
+							str+='Attivare la geolocalizzazione sul dispositivo o spostarsi in una zona con migliore ricezione del segnale GPS'
+							$("#POPmappaTxt").html(str)						
+							$("#POPmappa").popup("open")		
+							},
+						{timeout:10000})
 					APP.GETPOSITION=false			
 					}
 				else{
@@ -336,7 +365,13 @@ APP={
 				.on("change",function(){doSelect("Categoria")});
 			$("#SelectTipologia")
 				.selectmenu('refresh',true)
-				.on("change",function(){doSelect("Tipologia")});			
+				.on("change",function(){doSelect("Tipologia")});
+			$("#SelectCategoriaP")
+				.selectmenu('refresh',true)
+				.on("change",function(){doSelect("CategoriaP")});
+			$("#SelectTipologiaP")
+				.selectmenu('refresh',true)
+				.on("change",function(){doSelect("TipologiaP")});		
 			function doSelect(SELECT){
 				var val=$("#Select"+SELECT).val()
 				if(SELECT=="Preferiti"){
@@ -348,6 +383,8 @@ APP={
 								APP.ASSET=JSON.parse(JSON.stringify(APP.SCHEDA))
 								APP.ASSET.Id=false
 								APP.ASSET.Coordinate=false
+								APP.ASSET.Perimetro=[]
+								
 								$.each(APP.ASSET.Immagini,function(i,v){APP.ASSET.Immagini[i].stato="copy"})
 								APP.UTIL.go("Posizione")
 								}					
@@ -402,6 +439,7 @@ APP={
 			$('#Dati').trigger('create');
 			},
 		Immagini:function(){ // init
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
 			$("#FieldsImmagini").html(APP.UTIL.fields("Immagini"))
 			$('#Immagini').trigger('create');
 			$(".BTNimmagine").on("click",function(e){APP.IMAGE.click(e)})			
@@ -409,6 +447,7 @@ APP={
 			$.each(APP.TABDATA[APP.ASSET.Categoria][APP.ASSET.Tipologia].Immagini,function(index,value){APP.IMAGE.draw(index)})
 			},
 		Misure:function(){ // init
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
 			$("#FieldsMisure").html(APP.UTIL.fields("Misure"))			
 			$('#Misure').trigger('create');
 			},
@@ -421,64 +460,16 @@ APP={
 				}
 			},
 		Stato:function(){ // init
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
 			$("#FieldsStato").html(APP.UTIL.fields("Stato"))			
 			$('#Stato').trigger('create');
 			},
 		Posizione:function(){ // init	
-			if(APP.ASSET.Id){
-				APP.ASSET.ACTUALPOS={
-					Precisione:APP.ASSET.Coordinate.Precisione,
-					Lat:APP.ASSET.Coordinate.Lat,
-					Lng:APP.ASSET.Coordinate.Lng,
-					Elevazione:APP.ASSET.Coordinate.Elevazione,
-					PrecisioneE:APP.ASSET.Coordinate.PrecisioneE
-					}		
-				var latlon = new google.maps.LatLng(APP.ASSET.ACTUALPOS.Lat,APP.ASSET.ACTUALPOS.Lng)
-				APP.MAP.MAPPOS = new google.maps.Map(document.getElementById("mappaGeolocazione"),{
-					center:latlon,
-					tilt:0,
-					zoom:18,
-					mapTypeId:google.maps.MapTypeId.SATELLITE,
-					disableDefaultUI: true,
-					navigationControlOptions:{style:google.maps.NavigationControlStyle.SMALL}
-					});			
-				APP.ASSET.ACTUALMARK=new google.maps.Marker({
-					position:latlon,
-					map:APP.MAP.MAPPOS,
-					icon:'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
-					})
-				APP.MAP.MAPPOS.setCenter(latlon);
-				$("#FieldsPosizione").html("")
-				$("#BTNusaPosizione").hide()
-				$("#BTNcorreggiPosizione").show()				
-				APP.MAP.usaPos()
-				}
-			else{
-				APP.ASSET.ACTUALMARK=false
-				var pos=new google.maps.LatLng(APP.MAP.LAT,APP.MAP.LNG) 
-				APP.MAP.MAPPOS = new google.maps.Map(document.getElementById("mappaGeolocazione"),{
-					center:pos,
-					tilt:0,
-					zoom:18,
-					mapTypeId:google.maps.MapTypeId.SATELLITE,
-					disableDefaultUI: true,
-					navigationControlOptions:{style:google.maps.NavigationControlStyle.SMALL}
-					});
-				if(APP.TAB.length>0){
-					$.each(APP.TAB,function(IND,ASSET){
-						var MARKER= new google.maps.Marker({
-							position:{lat:ASSET.Coordinate.Lat,lng:ASSET.Coordinate.Lng},
-							map: APP.MAP.MAPPOS,							
-							icon:"http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_green.png"	
-							})
-						})
-					}
-				APP.MAP.WATCH = navigator.geolocation.watchPosition(APP.MAP.update,APP.MAP.errPos,{enableHighAccuracy:true/*,timeout:10000*/});
-				$("#BTNusaPosizione").show()
-				$("#BTNcorreggiPosizione").hide()
-				}
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
+			APP.POS.init()
 			},
 		Registra:function(){ // init
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
 			str=''
 			if(APP.ASSET.STATUS){
 				APP.ASSET.Data=moment().format("YYYY-MM-DD HH:mm:ss")
@@ -501,7 +492,7 @@ APP={
 			else{
 				str+='<div style="text-align:center"><div style="background:#f00;color:#fff;padding:10px;"><strong>L&#39;asset non può essere registrato!</strong></div>'
 				str+='Occorre caricare i seguenti dati:</div>'
-				if(!APP.ASSET.Coordinate)	{str+='<a href="#Posizione" class="ui-btn ui-corner-all ui-shadow">Posizione</a>'}
+				if(!APP.ASSET.Coordinate && !APP.ASSET.Perimetro)	{str+='<a href="#Posizione" class="ui-btn ui-corner-all ui-shadow">Posizione</a>'}
 				if(!APP.ASSET.DatiOK)		{str+='<a href="#Dati" 		class="ui-btn ui-corner-all ui-shadow">Dati</a>'}
 				if(!APP.ASSET.ImmaginiOK)	{str+='<a href="#Immagini" 	class="ui-btn ui-corner-all ui-shadow">Immagini</a>'}
 				if(!APP.ASSET.MisureOK)		{str+='<a href="#Misure" 	class="ui-btn ui-corner-all ui-shadow">Misure</a>'}
@@ -511,25 +502,28 @@ APP={
 			$('#Registra').trigger('create');			
 			},
 		Scheda:function(){ // init
+			$(".subtitle").html((APP.ASSET.Categoria+" - "+APP.ASSET.Tipologia).replace(/_/g," "))
 			$("#FieldsScheda").html("")
-			APP.UTIL.ajax("GET","urbano/api/urbobjs/"+APP.SCHEDA.Id+"/all","",function(RESULT){
-				APP.PARSE.scheda(RESULT,function(S){
-					APP.SCHEDA=S
-					if(!APP.SCHEDA){
-						$("#BTNSdel,#BTNSedit,#BTNScopy,").addClass("ui-disabled")
-						$("#FieldsScheda").html('<h1>La scheda dell&#39;asset &egrave; vuota o incompleta.</h1>')
-						}
-					else{
-						$("#BTNSdel,#BTNSedit,#BTNScopy").removeClass("ui-disabled")						
-						$("#FieldsScheda").html(APP.UTIL.drawScheda(APP.SCHEDA,"SCHEDA"))
-						$(".IMGbox img").on("click",function(e){
-							$("#POPschedaIMG").attr("src",APP.SCHEDA.Immagini[$(e.target).attr("data")].src)
-							$("#POPschedaImage").popup("open")
-							})
-						$('#Scheda').trigger('create');
-						}					
-					})
-				})			
+			if(APP.SCHEDA){
+				APP.UTIL.ajax("GET","urbano/api/urbobjs/"+APP.SCHEDA.Id+"/all","",function(RESULT){
+					APP.PARSE.scheda(RESULT,function(S){
+						APP.SCHEDA=S
+						if(!APP.SCHEDA){
+							$("#BTNSdel,#BTNSedit,#BTNScopy,").addClass("ui-disabled")
+							$("#FieldsScheda").html('<h1>La scheda dell&#39;asset &egrave; vuota o incompleta.</h1>')
+							}
+						else{
+							$("#BTNSdel,#BTNSedit,#BTNScopy").removeClass("ui-disabled")						
+							$("#FieldsScheda").html(APP.UTIL.drawScheda(APP.SCHEDA,"SCHEDA"))
+							$(".IMGbox img").on("click",function(e){
+								$("#POPschedaIMG").attr("src",APP.SCHEDA.Immagini[$(e.target).attr("data")].src)
+								$("#POPschedaImage").popup("open")
+								})
+							$('#Scheda').trigger('create');
+							}					
+						})
+					})			
+				}
 			},	
 		Errore:function(){ // init
 			$("#FieldsErrore").html(APP.ERRORE)			
@@ -613,10 +607,7 @@ APP={
 			$("#FieldsStato").html("")
 			},
 		Posizione:function(){ // change
-			if(APP.MAP.WATCH){
-				navigator.geolocation.clearWatch(APP.MAP.WATCH);
-				APP.MAP.WATCH=null
-				}
+			APP.POS.stopGps()
 			$("#FieldsPosizione").html("")
 			},
 		Registra:function(){ // change
@@ -634,6 +625,20 @@ APP={
 			}
 		},	
 	UTIL:{
+		doSelectP:function(){
+			APP.ASSET.Categoria="Recinzione"
+			APP.ASSET.Tipologia="Rete"
+			APP.ASSET.Dati={}
+			APP.ASSET.Immagini={}
+			
+			alert("ok")
+			},
+		getTabelle:function(){
+			//APP.UTIL.ajax("GET","urbano/api/urbobj_metasP/","",function(RESULT){APP.TABPERI=APP.PARSE.tabperi(RESULT)},true)
+       
+			APP.UTIL.ajax("GET","urbano/api/urbobj_metas/","",function(RESULT){APP.TABDATA=APP.PARSE.tabdata(RESULT)},true)
+			APP.UTIL.ajax("GET","/urbano/api/bookmarks",JSON.stringify({"lin":APP.USER.lin}),function(RESULT){APP.PREFERITI=(RESULT.result)?RESULT.result:RESULT},true)
+			},
 		go:function(PAG){ // util
 			// console.log("GO TO #"+PAG)
 			$("body").pagecontainer("change","#"+PAG);			
@@ -641,7 +646,7 @@ APP={
 		chk:function(){ // util		
 			if( APP.ASSET.Categoria && APP.ASSET.Tipologia){$("#btn-Dati,#btn-Misure,#btn-Posizione,#btn-Immagini,#btn-Stato,#btn-Registra").removeClass("ui-disabled")}
 			else{$("#btn-Dati,#btn-Misure,#btn-Posizione,#btn-Immagini,#btn-Stato,#btn-Registra").addClass("ui-disabled")}
-			if( APP.ASSET.Coordinate &&
+			if( APP.ASSET.Coordinate ||  APP.ASSET.Perimetro &&
 				APP.ASSET.Categoria  &&
 				APP.ASSET.Tipologia  &&
 				APP.ASSET.DatiOK       &&
@@ -815,7 +820,22 @@ APP={
 					}
 				})
 			return(result)			
-			}
+			},
+		cookie:{
+			get:function(NOME){
+				var name = NOME + "=";
+				var ca = document.cookie.split(';');
+				for(var i=0; i<ca.length; i++) {
+					var c = ca[i];
+					while (c.charAt(0)==' ') c = c.substring(1);
+					if (c.indexOf(name) == 0) return c.substring(name.length,c.length);
+					}
+				return "";
+				},
+			set:function(NOME,VALORE){
+				document.cookie=(NOME+"="+JSON.stringify(VALORE)+";expires="+APP.USER.expire)  ;
+				}			
+			}			
 		},
 	IMAGE:{
 		click:function(e){ // image
@@ -1277,6 +1297,8 @@ APP={
 		newPos:function(){ // registra
 			APP.ASSET.REGISTRA=false
 			APP.ASSET.Coordinate=false
+			APP.ASSET.Perimetro=[]
+			
 			$.each(APP.ASSET.Immagini,function(i,v){
 				APP.ASSET.Immagini[i].stato="copy"
 				if(!APP.ASSET.Immagini[i].url){
@@ -1292,6 +1314,7 @@ APP={
 			},
 		},
 	MAP:{
+		GPSISON:false,
 		MAP:false,				// mappa principale
 		MAPPOS:false,			// mappa posizione
 		WATCH:false,			// watch position
@@ -1307,6 +1330,10 @@ APP={
 			},
 		ZOOMTYPE:"LAST",
 		//	
+		toggleGps:function(){
+			if(APP.MAP.WATCH)	APP.MAP.stopWatch()
+			else 				APP.MAP.startWatch()
+			},
 		initAutocomplete:function()	{ // map
 			var input = document.getElementById('locationTextField');
 			var autocomplete = new google.maps.places.Autocomplete(input);				
@@ -1334,6 +1361,7 @@ APP={
 				APP.MAP.SEARCHBOX=new google.maps.places.SearchBox(document.getElementById('inputSearch'))
 				APP.MAP.MAP.controls[google.maps.ControlPosition.TOP_LEFT].push(document.getElementById('inputSearch'))
 				APP.MAP.SEARCHBOX.addListener('places_changed',function(){
+					
 					var places = APP.MAP.SEARCHBOX.getPlaces();	
 					if(places.length==0){return;}else{
 						var bounds = new google.maps.LatLngBounds();
@@ -1429,14 +1457,24 @@ APP={
 			//b.position.lat()=c+0.001
 			d=0
 			},
-		errPos:function(err){ // map
-			navigator.geolocation.clearWatch(APP.MAP.WATCH);
-			APP.MAP.WATCH=null
+		xerrPos:function(err){ // map
+			APP.MAP.stopWatch()
 			console.warn('ERROR(' + err.code + '): ' + err.message);
 			$("#BTNusaPosizione").hide()
 			$("#FieldsPosizione").html("<p>"+err.message+"</p>")
 			},
-		update:function(pos){ // map
+		xstartWatch:function(){
+			APP.MAP.WATCH = navigator.geolocation.watchPosition(APP.MAP.update,APP.MAP.errPos,{enableHighAccuracy:true/*,timeout:10000*/});								
+			$("#TposGPS").text("GPS ON").css("color","green")
+			},
+		xstopWatch:function(){
+			if(APP.MAP.WATCH){
+				navigator.geolocation.clearWatch(APP.MAP.WATCH)
+				APP.MAP.WATCH=false
+				$("#TposGPS").text("GPS OFF").css("color","red")
+				}			
+			},		
+		xupdate:function(pos){ // map
 			APP.ASSET.ACTUALPOS={
 				Precisione:parseFloat(pos.coords.accuracy),
 				Lat:parseFloat(pos.coords.latitude),
@@ -1454,27 +1492,33 @@ APP={
 			APP.MAP.MAPPOS.setCenter(latlon);
 			var str=""
 			var acc=APP.ASSET.ACTUALPOS.Precisione
-			var colore=(acc<=10)?"060":(acc<=15)?"CC0":(acc<=20)?"F60":"F00"
-			str+='<div style="background:#'+colore+';color:#fff;padding:5px">Prec.'+acc.toFixed(2)
-			str+=' Lat.'+APP.ASSET.ACTUALPOS.Lat.toFixed(5)+' '
-			str+=' Lng.'+APP.ASSET.ACTUALPOS.Lng.toFixed(5)+'</div>'
-			$("#FieldsPosizione").html(str)
+			var colore=(acc<=10)?"060":(acc<=15)?"CC0":(acc<=20)?"F60":"F00"		
+			//str+='<div style="background:#'+colore+';color:#fff;padding:5px">Prec.'+acc.toFixed(2)
+			//str+=' Lat.'+APP.ASSET.ACTUALPOS.Lat.toFixed(5)+' '
+			//str+=' Lng.'+APP.ASSET.ACTUALPOS.Lng.toFixed(5)+'</div>'
+			//$("#FieldsPosizione").html(str)
+			$("#TposGPS").text("GPS ON : Prec."+acc.toFixed(2))
 			},
-		usaPos:function(){ // map
-			// interrompe geolocazione
-			navigator.geolocation.clearWatch(APP.MAP.WATCH);
-			APP.MAP.WATCH=null
-			// cambia bottoni
-			$("#BTNusaPosizione").hide()
-			$("#BTNcorreggiPosizione").show()
-			//
-			APP.MAP.zoom(APP.MAP.MAPPOS,APP.ASSET.ACTUALMARK)
-			APP.ASSET.Coordinate=APP.ASSET.ACTUALPOS
-			APP.UTIL.chk()	
+		xusaPos:function(){ // map
+			if(APP.MAP.WATCH){
+				// interrompe geolocazione
+				APP.MAP.stopWatch()
+				APP.MAP.zoom(APP.MAP.MAPPOS,APP.ASSET.ACTUALMARK)
+				if(APP.TABDATA[APP.ASSET.Categoria][APP.ASSET.Tipologia].Perimetro){
+					APP.ASSET.Perimetro.push(APP.ASSET.ACTUALPOS)
+					}
+				else{
+					APP.ASSET.Coordinate=APP.ASSET.ACTUALPOS
+					} 				
+				APP.UTIL.chk()	
+				}
+			else{
+				APP.MAP.newPos()
+				}
 			},
 		newPos:function(){ // map
 			// cancella il marker
-			APP.ASSET.ACTUALMARK.setMap(null)		
+			if(APP.ASSET.ACTUALMARK) APP.ASSET.ACTUALMARK.setMap(null)		
 			// attiva 
 			google.maps.event.addListener(APP.MAP.MAPPOS,"click",function(event) {
 				var lat = event.latLng.lat();
@@ -1490,9 +1534,9 @@ APP={
 				APP.ASSET.ACTUALMARK.setPosition(latlng);
 				APP.ASSET.ACTUALMARK.setMap(APP.MAP.MAPPOS)
 				//APP.MAPPOS.setCenter(latlng);
-				var str=""
-				str+='<div style="background:#060;color:#fff;padding:5px">Prec.Man. Lat.'+APP.ASSET.ACTUALPOS.Lat.toFixed(5)+' Lng.'+APP.ASSET.ACTUALPOS.Lng.toFixed(5)+'</div>'
-				$("#FieldsPosizione").html(str)
+				//var str=""
+				//str+='<div style="background:#060;color:#fff;padding:5px">Prec.Man. Lat.'+APP.ASSET.ACTUALPOS.Lat.toFixed(5)+' Lng.'+APP.ASSET.ACTUALPOS.Lng.toFixed(5)+'</div>'
+				//$("#FieldsPosizione").html(str)
 				google.maps.event.clearListeners(APP.MAP.MAPPOS,"click");
 				APP.MAP.usaPos()
 				});		
@@ -1550,6 +1594,236 @@ APP={
 			APP.UTIL.go("Scheda")
 			}
 		},
+	POS:{
+		PERIMETRO:false,
+		POLYGON:false,
+		WATCH:false, 		// gps attivo GPS
+		CLICK:false, 		// click attivo
+		POSITION:false, 	// posizione attuale (geloc)
+		MARKER:false, 		// marker attuale
+		MARKERS:[],			// tabella markers
+		MAP:false, 			// mappa posizione
+		AUTOCENTER:false,
+		init:function(){
+			// annulla il perimetro se esiste
+			if(APP.POS.POLYGON)APP.POS.POLYGON.setMap(null);
+			APP.POS.PERIMETRO=new google.maps.MVCArray
+			// azzera la tabella dei markers
+			APP.ASSET.POSITION=false
+			APP.ASSET.MARKER=false
+			APP.POS.PERIMETRO.MARKERS=[]			
+			$("#BtnGps").removeClass("ui-disabled")
+			$("#BtnCenter").addClass("ui-disabled")
+			$("#BtnAdd").addClass("ui-disabled")
+			$("#BtnSalva").addClass("ui-disabled")
+			// crea la mappa POS
+			APP.POS.MAP = new google.maps.Map(document.getElementById("mappaGeolocazione"),{
+				center:new google.maps.LatLng(APP.MAP.LAT,APP.MAP.LNG) ,
+				tilt:0,
+				zoom:18,
+				mapTypeId:google.maps.MapTypeId.HYBRID,
+				disableDefaultUI: true,
+				navigationControlOptions:{style:google.maps.NavigationControlStyle.SMALL}
+				});
+			// imposta il perimetro
+			APP.POS.POLYGON=new google.maps.Polygon({
+				strokeWeight: 3,
+				fillColor: '#5555FF',
+				editable: true
+				});
+			APP.POS.POLYGON.setMap(APP.POS.MAP);
+			APP.POS.POLYGON.setPaths(new google.maps.MVCArray([APP.POS.PERIMETRO]));
+			// crea i marker degli asset esistenti		
+			if(APP.TAB.length>0){
+				$.each(APP.TAB,function(IND,ASSET){
+					new google.maps.Marker({
+						position:{lat:ASSET.Coordinate.Lat,lng:ASSET.Coordinate.Lng},
+						map: APP.POS.MAP,							
+						icon:"http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_green.png"	
+						})
+					})
+				}
+			// casella di ricerca
+			$("body").append($("<input>",{type:"text",id:"inputSearchP",style:"margin:10px 0px 0px 10px;height:30px;"}))
+			APP.POS.SEARCHBOXP=new google.maps.places.SearchBox(document.getElementById('inputSearchP'))
+			APP.POS.MAP.controls[google.maps.ControlPosition.TOP_LEFT].push(document.getElementById('inputSearchP'))
+			APP.POS.SEARCHBOXP.addListener('places_changed',function(){
+				APP.POS.stopGps()
+				var places = APP.POS.SEARCHBOXP.getPlaces();	
+				if(places.length==0){return;}else{
+					var bounds = new google.maps.LatLngBounds();
+					if (places[0].geometry.viewport) {bounds.union(places[0].geometry.viewport);} 
+					else{bounds.extend(places[0].geometry.location);}				
+					APP.POS.MAP.fitBounds(bounds);
+					//APP.POS.MAP.reload()
+					}
+				})
+			// box testo gps
+			APP.POS.messaggio("Toccare lo schermo o attivare il gps")
+			$("body").append($("<div>",{id:"TposGPS"}))
+			APP.POS.MAP.controls[google.maps.ControlPosition.TOP_LEFT].push(document.getElementById('TposGPS'))
+			//
+			if(APP.ASSET.Id){ // se asset esistente crea oggetto e marker
+				var latlon=new google.maps.LatLng(APP.POS.POSITION.Lat,APP.POS.POSITION.Lng)
+				APP.POS.POSITION={ // coordinate dell'asset
+					Precisione:APP.ASSET.Coordinate.Precisione,
+					Lat:APP.ASSET.Coordinate.Lat,
+					Lng:APP.ASSET.Coordinate.Lng,
+					Elevazione:APP.ASSET.Coordinate.Elevazione,
+					PrecisioneE:APP.ASSET.Coordinate.PrecisioneE,
+					MARKER:new google.maps.Marker({
+						position:latlon,
+						map:APP.POS.MAP,
+						draggable:true,
+						icon:'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+						})
+					}
+				APP.POS.MAP.setCenter(latlon);
+				}
+			else{
+				APP.POS.POSITION=false
+				}
+			APP.POS.manualOn()
+			},
+		update:function(pos){ // map		
+			// prende la posizione attuale dal gps
+			var latlon=new google.maps.LatLng(pos.coords.latitude,pos.coords.longitude)
+			APP.POS.removeMarker()	
+			APP.POS.POSITION={
+				Precisione:parseFloat(pos.coords.accuracy),
+				Lat:parseFloat(pos.coords.latitude),
+				Lng:parseFloat(pos.coords.longitude),
+				Elevazione:parseFloat(pos.coords.altitude),
+				PrecisioneE:parseFloat(pos.coords.altitudeAccuracy),
+				MARKER:new google.maps.Marker({
+					position:latlon,
+					map:APP.POS.MAP,
+					icon: {
+						url: '/IMG/ICON/center-red.png',
+						anchor: new google.maps.Point(18,18)
+						}
+					})
+				}		
+			if(APP.POS.AUTOCENTER) {
+				APP.POS.AUTOCENTER=false
+				APP.POS.MAP.setCenter(APP.POS.POSITION.MARKER.position)
+				};		
+			$("#TposGPS").text("GPS ON : Prec."+APP.POS.POSITION.Precisione.toFixed(2))
+			},
+		removeMarker:function(){
+			if(typeof(APP.POS.POSITION.MARKER)=="object") APP.POS.POSITION.MARKER.setMap(null)	
+			APP.POS.POSITION.MARKER=false	
+			},
+		errPos:function(err){ // map
+			APP.POS.stopWatch()
+			console.warn('ERROR(' + err.code + '): ' + err.message);
+			},
+		startGps:function(){
+			APP.POS.manualOff()
+			APP.POS.WATCH=true
+			$("#BtnCenter").removeClass("ui-disabled")
+			$("#BtnAdd").removeClass("ui-disabled")
+			APP.POS.messaggio("Premere ADD per inserire un marker o disattivare GPS per puntamento manuale")
+			// attiva il watchposition
+			APP.POS.AUTOCENTER=true // centratura automatica (solo la prima volta)
+			APP.POS.WATCH = navigator.geolocation.watchPosition(APP.POS.update,APP.POS.errPos,{enableHighAccuracy:true/*,timeout:10000*/});								
+			// attiva testo gps
+			$("#TposGPS").text("GPS ON").css("color","#0f0")
+			},
+		stopGps:function(){
+			$("#BtnCenter").removeClass("ui-disabled")
+			$("#BtnAdd").removeClass("ui-disabled")
+			APP.POS.messaggio("Toccare lo schermo o attivare il gps")	
+			if(APP.POS.WATCH!==false){
+				APP.POS.removeMarker()
+				navigator.geolocation.clearWatch(APP.POS.WATCH)
+				APP.POS.WATCH=false
+				$("#TposGPS").text("GPS OFF").css("color","#f50")
+				}
+			APP.POS.manualOn()
+			},
+		gpsButton:function(){
+			if(APP.POS.WATCH===false) APP.POS.startGps()
+			else APP.POS.stopGps()	},
+		centerButton:function(){
+			APP.POS.MAP.setCenter(APP.POS.POSITION.MARKER.position)
+			},
+		addButton:function(){
+			//APP.POS.stopGps()
+			APP.POS.PERIMETRO.insertAt(APP.POS.PERIMETRO.length,APP.POS.POSITION.MARKER.position);
+			APP.POS.removeMarker()
+			APP.POS.MARKERS.push(JSON.parse(JSON.stringify(APP.POS.POSITION)))
+			$("#BtnSalva").toggleClass("ui-disabled",APP.POS.MARKERS.length<3)
+			//APP.POS.drawMarkers()
+			// se perimetro
+			// se non perimetro
+			// 
+			},
+		drawMarkers:function(){
+			$.each(APP.POS.MARKERS,function(i,m){
+				if(!m.MARKER){
+					m.MARKER=new google.maps.Marker({
+						position:new google.maps.LatLng(m.Lat,m.Lng),
+						map:APP.POS.MAP,
+						icon:'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'	
+						})				
+					}
+				})
+			},
+		manualOff:function(){
+			APP.POS.CLICK=false
+			google.maps.event.clearListeners(APP.POS.MAP,"click")	
+			},
+		manualOn:function(){
+			// stoppa il gps
+			// APP.POS.stopGps()
+			APP.POS.CLICK=true
+			$("#BtnCenter").addClass("ui-disabled")
+			$("#BtnAdd").addClass("ui-disabled")
+			$("#BtnSalva").addClass("ui-disabled")			
+			// attiva il click sulla mappa
+			APP.POS.CLICK=true
+			// messaggio help
+			APP.POS.messaggio("Premere ADD per inserire un marker o attivare GPS per puntamento automatico")
+			google.maps.event.addListener(APP.POS.MAP,"click",function(event) {
+				APP.POS.removeMarker()	
+				$("#BtnCenter").removeClass("ui-disabled")
+				$("#BtnAdd").removeClass("ui-disabled")
+				var lat = event.latLng.lat();
+				var lng = event.latLng.lng();
+				var latlng = new google.maps.LatLng(lat,lng)
+				APP.POS.POSITION={
+					Precisione:0,
+					Lat:lat,
+					Lng:lng,
+					Elevazione:0,
+					PrecisioneE:0,
+					MARKER:new google.maps.Marker({
+						draggable:true,
+						position:new google.maps.LatLng(lat,lng),
+						map:APP.POS.MAP,
+						'icon': {
+							'url': '/IMG/ICON/center-green.png',
+							'anchor': new google.maps.Point(18,18)
+							}
+						})
+					}
+				//google.maps.event.clearListeners(APP.POS.MAP,"click");
+				});				
+			},
+		usaPos:function(){
+			if(APP.POS.WATCH===false){
+				
+				}
+			else{
+				// clicca sulla mappa
+				
+				}
+			},
+		messaggio:function(M){
+			$("#HelpPosition").html(M)
+			},
+		},
 	EDIT:{
 		ACTION:false,
 		go:function(A){ // edit
@@ -1598,6 +1872,8 @@ APP={
 				APP.ASSET=JSON.parse(JSON.stringify(APP.SCHEDA))				
 				APP.ASSET.Id=false
 				APP.ASSET.Coordinate=false
+				APP.ASSET.Perimetro=[]
+				
 				$.each(APP.ASSET.Immagini,function(i,v){APP.ASSET.Immagini[i].stato="copy"})
 				$("#POPscheda").popup("close")
 				APP.UTIL.go("Posizione")
@@ -1637,18 +1913,21 @@ APP={
 			"headers":{"cache-control":"no-cache"},
 			success: function(response){
 				var R=JSON.parse(response)
+				APP.USER.logged=true
 				APP.USER.token=R.id_token
-				APP.USER.lin=lin				
-				APP.UTIL.ajax("GET","urbano/api/urbobj_metas/","",function(RESULT){APP.TABDATA=APP.PARSE.tabdata(RESULT)},true)
-				APP.UTIL.ajax("GET","/urbano/api/bookmarks",JSON.stringify({"lin":APP.USER.lin}),function(RESULT){APP.PREFERITI=(RESULT.result)?RESULT.result:RESULT},true)
+				APP.USER.lin=lin
+				APP.UTIL.getTabelle()	
+				APP.UTIL.cookie.set("URBANO",{"USER":lin,"ASSET":""},true)
 				APP.UTIL.go("Home")	
 				},
 			error:function(x,s,e){
 				if(x.status==401){
-					$("#notelogin").html('<p style="color:#f00">Accesso non autorizzato, controllare username e password e riprovare.</p>')
+					$("#POPloginTxt").html("Accesso non autorizzato, controllare username e password e riprovare.")						
+					$("#POPlogin").popup("open")					
 					}
 				else{
-					APP.ERRORE="Errore generico AJAX."
+					$("#POPloginTxt").html("Non &egrave; possibile effettuare il login")						
+					$("#POPlogin").popup("open")					
 					}
 				}
 			});				

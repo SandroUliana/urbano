@@ -13,6 +13,7 @@
 		<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css">
 		<link rel="stylesheet" href="TEMA/urbano.css" />
 		<link rel="stylesheet" href="TEMA/u.min.css" />
+		<!-- SCRIPTS -->
 		<script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
 		<script><!-- impostazione behaviour mobile -->
 		$(document).on("mobileinit", function () {
@@ -22,7 +23,8 @@
 			});
 		</script>
 		<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
-		<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&libraries=places"></script>
+		 <!--AIzaSyDsFOAkPpZsefN7T62AJbIggrhjI9HDMvo -->
+		<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&libraries=places&key=AIzaSyDsFOAkPpZsefN7T62AJbIggrhjI9HDMvo"></script>
 		<!--<script type="text/javascript" src="http://maps.google.com/maps/api/js?v=3.exp&key=AIzaSyDsFOAkPpZsefN7T62AJbIggrhjI9HDMvo&language=it&region=IT&libraries=places"></script>-->
 		<script type="text/javascript" src="http://google-maps-utility-library-v3.googlecode.com/svn/trunk/markerclusterer/src/markerclusterer.js"></script><!-- clusterizzazione dei marker -->
 		
@@ -65,6 +67,12 @@
 					</form>	
 				</div>
 			</div>
+			<div data-role="popup" id="POPlogin" style="padding:5px;">
+				<div role="main" class="ui-content">
+					<h1 id="POPloginTitle"></h1>
+					<p id="POPloginTxt"></p>
+				</div> 			
+			</div> 			
 		</div>
 		<div data-role="page" id="Home">
 			<div data-role="panel" id="mapMenu" data-display="overlay">
@@ -179,6 +187,7 @@
 						</div>
 						<div data-role="collapsible">
 							<h3>Perimetro</h3>
+							<a href="javascript:APP.UTIL.doSelectP()" data-role="button" id="BTNrotate">Perimetro</a>
 							<select   id="SelectCategoriaP" data-native-menu="false" disabled="disabled">
 								<option>Categoria</option>
 							</select>
@@ -336,8 +345,21 @@
 			</div>			
 		</div>		
 		<div data-role="page" id="Posizione">
+			<!--
+			<div data-role="panel" id="posMenu" data-display="overlay">
+				<ul id="nav-menu-links" data-role="listview">				
+					<li data-icon="crosshairs">	<a href="javascript:APP.POS.toggleGps()" id="BposGps"    class="ui-nodisc-icon" 			>GPS	<span class="MNUsub">Attiva il GPS</span></a></li>
+					<li data-icon="eye">		<a href="javascript:APP.POS.center()"    id="BposCenter" class="ui-nodisc-icon ui-disabled"	>Center	<span class="MNUsub">Centra la mappa</span></a></li>
+					<li data-icon="map-marker">	<a href="javascript:APP.POS.manualPos()" id="BposManual" class="ui-nodisc-icon "			>Manual	<span class="MNUsub">Inserisci una posizione toccando lo schermo</span></a></li>
+					<li data-icon="map-marker">	<a href="javascript:APP.POS.manualPath()" id="BposManual" class="ui-nodisc-icon "			>Path	<span class="MNUsub">Registra punto del percorso</span></a></li>
+					<li data-icon="plus">		<a href="javascript:APP.POS.usaPos()"    id="BposUse" 	 class="ui-nodisc-icon ui-disabled"	>Use	<span class="MNUsub">Registra la posizione attuale</span></a></li>					
+				</ul>
+			</div>	
+			-->
 			<div data-role="header" data-position="fixed" >
 				<img src="IMG/urbano.png" style="float:left;margin:3px;width:38px;position:absolute" class="BTNMenu">
+			
+			
 				<div class="subtitled">
 					<h1 class="ui-title" aria-level="1" role="heading" tabindex="0">Position</h1>
 					<div class="subtitle">...</div>
@@ -345,29 +367,22 @@
 				<!--<a href="#Menu" class="ui-btn ui-btn-right ui-corner-all ui-icon-bars ui-btn-icon-notext ui-btn-inline ui-nodisc-icon">Menu</a>									-->
 			</div>
 			<div role="main" class="ui-content" style="padding:0px">
-				<div id="mappaGeolocazione"></div>			
-				<div class="bottomOfPage" style="bottom: 58px;">
-				
-					<div id="FieldsPosizione">
-						<div class="spinner">
-						  <div class="rect1"></div>
-						  <div class="rect2"></div>
-						  <div class="rect3"></div>
-						  <div class="rect4"></div>
-						  <div class="rect5"></div>
-						</div>
-					</div>
-					<a href="javascript:APP.MAP.usaPos()"   class="ui-btn ui-shadow ui-corner-all" style="margin:0.6em" id="BTNusaPosizione">Usa posizione</a>
-					<a href="javascript:APP.MAP.newPos()" class="ui-btn ui-shadow ui-corner-all" style="margin:0.6em" id="BTNcorreggiPosizione">Correggi posizione</a>
-					<p></p>
-				</div>
+
+
+				<div id="mappaGeolocazione"></div>
 			</div>	
+			
+<!-- /navbar -->
+
 			<div class="ui-footer ui-bar-inherit ui-footer-fixed slideup" data-position="fixed" data-role="footer"  style="text-align:center;">
+				<div id="HelpPosition">Toccare lo schermo o attivare il gps</div>	
 				<div data-role="navbar">
 					<ul>
-						<li><a href="#Stato" data-icon="carat-l">Indietro</a></li>
-						<li><a href="#Registra" data-icon="check" class="BTNsalva">Salva asset</a></li>
-						<li><a href="#Dati" data-icon="carat-r"  class="ui-disabled">Avanti</a></li>
+						<li>	<a   			  class=""				data-icon="carat-l"    href="#Stato"						>Indietro</a></li>
+						<li>	<a id="BtnGps"    class="" 				data-icon="crosshairs" href="javascript:APP.POS.toggleGps()">GPS		</a></li>
+						<li>    <a id="BtnCenter" class="ui-disabled" 	data-icon="eye"		   href="javascript:APP.POS.center()"   >Center	</a></li>
+						<li>	<a id="BtnAdd" 	  class="ui-disabled" 	data-icon="map-marker" href="javascript:APP.POS.manualPos()">Add		</a></li>
+						<li>	<a id="BtnSalva"  class="ui-disabled"	data-icon="check"      href="#Registra"    					>Salva asset</a></li>
 					</ul>
 				</div>
 			</div>
@@ -474,6 +489,8 @@
 				<p>Non è possibile proseguire con l'applicazione, i dati non salvati andranno persi</p>
 				<a hrfe="/" class="ui-btn">Riavvia</a>
 			</div>	
-		</div>				
+		</div>	
+
+		
 	</body>
 </html>	
